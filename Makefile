@@ -21,6 +21,7 @@ NEKOVM_FLAGS = -Lbin -lneko
 STD_NDLL_FLAGS = ${NEKOVM_FLAGS} -lrt
 INSTALL_FLAGS =
 LIB_PREFIX = /opt/local
+ADDITIONAL_INCLUDE=-I /usr/local/include
 
 NEKO_EXEC = LD_LIBRARY_PATH=../bin:${LD_LIBRARY_PATH} NEKOPATH=../boot:../bin ../bin/neko
 
@@ -32,10 +33,22 @@ NEKO_EXEC = LD_LIBRARY_PATH=../bin:${LD_LIBRARY_PATH} NEKOPATH=../boot:../bin ..
 #
 # CFLAGS += -DLOW_MEM
 
+## CROSS SPECIFIC
+ifeq (${cross}, 1)
+	# cross compiling with mingw:
+	# don't forget to download a recent libgc binary. It can be found at
+	# http://lrn.no-ip.info/packages/i686-w64-mingw/bdw-gc/
+
+	# we will use the current installed neko instead of the built neko - current NEKOPATH will have priority
+	NEKO_EXEC = NEKOPATH=$(NEKOPATH):/usr/lib/neko:../boot neko
+	# do not use any system include path
+	ADDITIONAL_INCLUDE =
+endif
+
 ## MINGW SPECIFIC
 
 ifeq (${os}, mingw)
-CFLAGS = -g -Wall -O3 -momit-leaf-frame-pointer -I vm -I /usr/local/include -I libs/common
+CFLAGS = -g -Wall -O3 -momit-leaf-frame-pointer -I vm ${ADDITIONAL_INCLUDE} -I libs/common
 EXTFLAGS =
 MAKESO = $(CC) -O -shared
 LIBNEKO_NAME = neko.dll
@@ -58,6 +71,12 @@ CFLAGS += -L/usr/local/lib -L${LIB_PREFIX}/lib -I${LIB_PREFIX}/include
 INSTALL_FLAGS = -static
 
 endif
+
+export CC
+export NEKO_EXEC
+export CFLAGS
+export os
+export cross
 
 ### MAKE
 
@@ -131,6 +150,9 @@ uninstall:
 	rm -rf ${INSTALL_PREFIX}/lib/neko
 
 .SUFFIXES : .c .o
+
+vm/%.o: vm/%.c
+	${CC} ${CFLAGS} ${EXTFLAGS} -DNEKO_SOURCES -o $@ -c $<
 
 .c.o :
 	${CC} ${CFLAGS} ${EXTFLAGS} -o $@ -c $<

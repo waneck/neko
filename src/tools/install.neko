@@ -22,7 +22,11 @@
  
 // PRIMITIVES
 
-system = $loader.loadprim("std@sys_string",0)();
+getenv = $loader.loadprim("std@get_env",1);
+host = $loader.loadprim("std@sys_string",0)();
+target = switch getenv("os") { "osx" => "Mac" "mingw" => "Windows" default => host }
+cross = getenv("cross");
+
 is64 = $loader.loadprim("std@sys_is64",0)();
 chdir = $loader.loadprim("std@set_cwd",1);
 readdir = $loader.loadprim("std@sys_read_dir",1);
@@ -34,7 +38,6 @@ exists = $loader.loadprim("std@sys_exists",1);
 split = $loader.loadprim("std@string_split",2);
 mkdir = $loader.loadprim("std@sys_create_dir",2);
 delete = $loader.loadprim("std@file_delete",1);
-getenv = $loader.loadprim("std@get_env",1);
 
 buffer_new = $loader.loadprim("std@buffer_new",0);
 buffer_add_char = $loader.loadprim("std@buffer_add_char",2);
@@ -89,10 +92,10 @@ libs = {
 	},
 	ui => {
 		src => $array("ui"),
-		inc => switch system { "Mac" => "Carbon.h" default => "gtk/gtk.h" },
-		incname => switch system { "Mac" => "Carbon" default => "GTK+2.0" },
-		cflags => switch system { "Mac" => "" default => "`pkg-config --cflags gtk+-2.0`" },
-		lparams => switch system { "Mac" => "-framework Carbon" default => "`pkg-config --libs gtk+-2.0` -lgthread-2.0" },
+		inc => switch target { "Mac" => "Carbon.h" default => "gtk/gtk.h" },
+		incname => switch target { "Mac" => "Carbon" default => "GTK+2.0" },
+		cflags => switch target { "Mac" => "" default => "`pkg-config --cflags gtk+-2.0`" },
+		lparams => switch target { "Mac" => "-framework Carbon" default => "`pkg-config --libs gtk+-2.0` -lgthread-2.0" },
 	},
 	mod_tora => {
 		src => $array("../common/socket","protocol","mod_tora"),
@@ -131,16 +134,19 @@ while( i < $asize($loader.args) ) {
 // PLATFORM
 
 cflags = "-O3 -fPIC";
-if( system == "Linux" ) cflags += " -pthread";
+if( target == "Linux" ) cflags += " -pthread";
 cc = getenv("CC");
 if( cc == null ) cc = "gcc";
-linkcmd = switch system { "BSD" => "ld" default => cc };
+linkcmd = switch target { "BSD" => "ld" default => cc };
 linkneko = "-lneko";
-linkoptions = switch system {
+linkoptions = switch target {
 	"Mac" => "-bundle -undefined dynamic_lookup -L../../bin"
+	"Windows" => "-shared -L../../bin"
 	default => "-shared -L../../bin -pthread"
 };
-nekovm = switch system { "Windows" => "..\\bin\\neko" default => "../bin/neko" };
+nekovm = getenv("NEKO_EXEC");
+if ( nekovm == null )
+	nekovm = switch host { "Windows" => "..\\bin\\neko" default => "../bin/neko" };
 
 // COMMANDS
 
@@ -276,7 +282,7 @@ map = function(a,f) {
 }
 
 copy = function(file,path) {
-	switch system {
+	switch host {
 	"Windows" => {
 		slashes = function(f) {
 			var c = split(f,"/");
@@ -420,7 +426,9 @@ var liblist = $objfields(libs);
 var i = 0;
 while( i < $asize(liblist) ) {
 	var l = liblist[i];
-	compile_lib($field(l),$objget(libs,l));
+	var fld = $field(l);
+	if ( cross == null || $ssize(fld) <= 3 || $ssub(fld,0,3) != "mod" )
+		compile_lib($field(l),$objget(libs,l));
 	i += 1;
 }
 
